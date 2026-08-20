@@ -20,6 +20,11 @@
                                 <i class="fas fa-map-marker-alt text-danger me-2"></i>
                                 {{ clinic.address }}, {{ clinic.city }}, {{ clinic.state }}
                             </p>
+                            {% if clinic.latitude and clinic.longitude %}
+                                <button class="btn btn-outline-info btn-sm" onclick="viewOnMap({{ clinic.latitude }}, {{ clinic.longitude }})">
+                                    <i class="fas fa-map-marked-alt me-1"></i>View on Map
+                                </button>
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
                             <h5 class="text-success">Contact Information</h5>
@@ -35,12 +40,7 @@
                                     <a href="tel:{{ clinic.contact_number }}" class="text-decoration-none">{{ clinic.contact_number }}</a>
                                 </p>
                             {% endif %}
-                            {% if clinic.website %}
-                                <p class="mb-2">
-                                    <i class="fas fa-globe text-primary me-2"></i>
-                                    <a href="{{ clinic.website }}" target="_blank" class="text-decoration-none">{{ clinic.website }}</a>
-                                </p>
-                            {% endif %}
+
                         </div>
                     </div>
 
@@ -238,8 +238,10 @@
                             {'name': 'Dr. Nisha Choudhary', 'specialization': 'Gynecologist'},
                             {'name': 'Dr. Jignesh Chauhan', 'specialization': 'Embryologist'},
                             {'name': 'Dr. Hemangi Lele', 'specialization': 'Laparoscopic Surgeon'},
-                            {'name': 'Dr. Kabir Surana', 'specialization': 'Andrologist'},
-                        {% set doctor_index = clinic.id % default_doctors|length %}
+                            {'name': 'Dr. Kabir Surana', 'specialization': 'Andrologist'}
+                        ] %}
+                        {% set len_doctors = default_doctors|length %}
+                        {% set doctor_index = clinic.id - (clinic.id // len_doctors) * len_doctors %}
                         {% set default_doctor = default_doctors[doctor_index] %}
                         <div class="row">
                             {% for doctor in clinic.doctors %}
@@ -278,16 +280,6 @@
                         <a href="{{ url_for('find_clinic') }}" class="btn btn-outline-success me-2">
                             <i class="fas fa-arrow-left me-2"></i>Back to Search
                         </a>
-                        {% if clinic.latitude and clinic.longitude %}
-                            <a href="#" class="btn btn-outline-info me-2" onclick="viewOnMap({{ clinic.latitude }}, {{ clinic.longitude }}, '{{ clinic.name|replace('\'', '\\\'') }}')">
-                                <i class="fas fa-map-marked-alt me-2"></i>View on Map
-                            </a>
-                        {% endif %}
-                        {% if clinic.website %}
-                            <a href="{{ clinic.website }}" target="_blank" class="btn btn-success">
-                                <i class="fas fa-external-link-alt me-2"></i>Visit Website
-                            </a>
-                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -299,9 +291,11 @@
 {% block scripts %}
 <script>
 // Function to view clinic on Google Maps
-function viewOnMap(lat, lng, name) {
+function viewOnMap(lat, lng) {
     var url = "https://www.google.com/maps/search/?api=1&query=" + lat + "," + lng;
     window.open(url, '_blank');
 }
 </script>
 {% endblock %}
+
+

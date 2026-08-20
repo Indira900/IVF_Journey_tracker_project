@@ -20,8 +20,19 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 # Initialize the Random Forest Classifier with 100 decision trees
 rf = RandomForestClassifier(n_estimators=100, random_state=42)
 rf.fit(X_train, y_train)
-print("IVF Model Accuracy:", accuracy_score(y_test, rf.predict(X_test)))
+accuracy = accuracy_score(y_test, rf.predict(X_test))
+print("IVF Model Accuracy:", accuracy)
 joblib.dump(rf, "models/ivf_success_model.pkl")
+
+# Save metadata
+metadata = {
+    "feature_order": list(X.columns),
+    "model": "RandomForestClassifier",
+    "accuracy": float(accuracy)
+}
+import json
+with open("models/ivf_model_metadata.json", "w") as f:
+    json.dump(metadata, f, indent=4)
 
 # ---------- Mood Trend Model ----------
 mood = pd.read_excel("ivf_datasets.xlsx", sheet_name="Mood_Wellness_Data")

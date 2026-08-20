@@ -1,12 +1,22 @@
-# TODO: Hide Navigation Items on Login Page
+# IVF Journey Tracker — Feature Implementation TODO
 
-- [x] Modify templates/base.html to conditionally hide navigation items (Dashboard, Predictions, etc.) when user is not logged in, leaving only the "IVF Journey Tracker" brand visible.
-- [x] Test the login page to ensure only the brand is shown.
-- [x] Verify other pages still show nav items when logged in.
+## Feature 1: Smart Notification & Alert System
+- [ ] Step 1: Add `Notification` model to `models.py`
+- [ ] Step 2: Add notification helper + API routes to `main.py`
+- [ ] Step 3: Integrate notification triggers (wellness, prediction, appointment)
+- [ ] Step 4: Add notification bell UI to `base.html`
+- [ ] Step 5: Create `notifications.js` for AJAX polling
+- [ ] Step 6: Create `notifications.html` page (optional)
 
-# TODO: Add Success Rate Graph and Update Recent Activity
+## Feature 2: Advanced Centralized Medical Record System
+- [ ] Step 7: Modify `MedicalDocument` + add `DocumentVersion`, `DocumentAnnotation`, `DocumentShare` to `models.py`
+- [ ] Step 8: Update `/upload_document` route with category/version support
+- [ ] Step 9: Update `/my_documents` route with filtering/timeline
+- [ ] Step 10: Add document detail, annotation, share, version routes
+- [ ] Step 11: Overhaul `my_documents.html` into Medical Records page
+- [ ] Step 12: Update dashboard links + create `medical_records.js`
 
-- [x] Update templates/doctor_dashboard.html to change Recent Activity section to display medical activities (injections, scans, blood work) with appropriate icons and details.
-- [x] Update static/js/doctor_dashboard.js to create a bar chart showing success rates for this month vs last month.
-- [x] Test the dashboard to ensure the graph displays correctly and recent activities show medical procedures.
-- [x] Run the Flask app to test the changes.
+## Follow-up
+- [ ] Step 13: Database migration (run app to create tables)
+- [ ] Step 14: Test and verify
+

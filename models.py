@@ -40,7 +40,10 @@ class User(db.Model):
     wellness_logs = db.relationship('WellnessLog', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     predictions = db.relationship('Prediction', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     chat_messages = db.relationship('ChatMessage', backref='user', lazy='dynamic', cascade="all, delete-orphan")
-    medical_documents = db.relationship('MedicalDocument', backref='user', lazy='dynamic', cascade="all, delete-orphan") 
+    medical_documents = db.relationship('MedicalDocument', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    partner_connections_as_patient = db.relationship('PartnerConnection', foreign_keys='PartnerConnection.patient_id', backref='patient_user', lazy='dynamic', cascade="all, delete-orphan")
+    partner_connections_as_partner = db.relationship('PartnerConnection', foreign_keys='PartnerConnection.partner_id', backref='partner_user', lazy='dynamic', cascade="all, delete-orphan")
+    partner_invitations = db.relationship('PartnerInvitation', backref='patient', lazy='dynamic', cascade="all, delete-orphan")
     
     def set_password(self, password):
         """Hashes the password for secure storage."""
@@ -138,6 +141,8 @@ class Clinic(db.Model):
     description = db.Column(db.Text)
     latitude = db.Column(db.Float)  # Latitude for map markers
     longitude = db.Column(db.Float)  # Longitude for map markers
+    zip_code = db.Column(db.String(10))  # Added zip_code for search
+    clinic_type = db.Column(db.String(50), default='IVF')  # Type of clinic (IVF, Fertility, Reproductive Health)
 
     # Relationship to doctors working at this clinic
     doctors = db.relationship('User', backref='clinic', lazy='dynamic') # References 'user' table via clinic_id foreign key
@@ -284,6 +289,7 @@ class ChatMessage(db.Model):
 class MedicalDocument(db.Model):
     """
     Stores metadata for uploaded medical documents.
+    Upgraded for Centralized Medical Record Management.
     """
     __tablename__ = 'medical_document' # <-- CRITICAL FIX: Explicit table name added
     id = db.Column(db.Integer, primary_key=True)
@@ -297,8 +303,15 @@ class MedicalDocument(db.Model):
     extracted_text = db.Column(db.Text) # Extracted text from OCR/PDF processing
     uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+    # --- New fields for Centralized Medical Record System ---
+    title = db.Column(db.String(255))  # User-friendly document title
+    category = db.Column(db.String(50), default='other')  # lab_report, scan, prescription, other
+    version = db.Column(db.Integer, default=1)  # Version number
+    uploaded_by = db.Column(db.String(10), default='patient')  # patient, doctor
+    tags = db.Column(db.String(255))  # Comma-separated tags for search
+
     def __repr__(self):
-        return f'<MedicalDocument {self.filename} for User {self.user_id}>'
+        return f'<MedicalDocument {self.filename} (v{self.version}) for User {self.user_id}>'
 
 
 class Prediction(db.Model):
@@ -346,3 +359,273 @@ class MedicalActivity(db.Model):
 
     def __repr__(self):
         return f'<MedicalActivity {self.activity_type}: {self.activity_name} for Patient {self.patient_id}>'
+
+
+class Message(db.Model):
+    """
+    Stores messages between patients and doctors for communication.
+    """
+    __tablename__ = 'message'
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_messages')
+    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_messages')
+
+    def __repr__(self):
+        return f'<Message from {self.sender_id} to {self.receiver_id}>'
+
+
+class Notification(db.Model):
+    """
+    Stores smart notifications and alerts for users (patients, doctors, admins).
+    """
+    __tablename__ = 'notification'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(20), default='info')  # info, warning, critical
+    category = db.Column(db.String(30), default='system')  # medication, risk, wellness, appointment, system
+    is_read = db.Column(db.Boolean, default=False)
+    link = db.Column(db.String(255))  # optional URL to redirect when clicked
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationship to user
+    user = db.relationship('User', backref=db.backref('notifications', lazy='dynamic', cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<Notification {self.type} for User {self.user_id}: {self.message[:50]}>'
+
+
+class DocumentVersion(db.Model):
+    """
+    Tracks version history for uploaded medical documents.
+    """
+    __tablename__ = 'document_version'
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey('medical_document.id'), nullable=False)
+    version = db.Column(db.Integer, nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    change_note = db.Column(db.Text)
+
+    # Relationship to parent document
+    document = db.relationship('MedicalDocument', backref=db.backref('versions', lazy='dynamic', cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<DocumentVersion {self.version} of Document {self.document_id}>'
+
+
+class DocumentAnnotation(db.Model):
+    """
+    Allows doctors to annotate/comment on medical documents.
+    """
+    __tablename__ = 'document_annotation'
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey('medical_document.id'), nullable=False)
+    doctor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    annotation_text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    document = db.relationship('MedicalDocument', backref=db.backref('annotations', lazy='dynamic', cascade="all, delete-orphan"))
+    doctor = db.relationship('User', backref=db.backref('document_annotations', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<DocumentAnnotation by Doctor {self.doctor_id} on Document {self.document_id}>'
+
+
+class DocumentShare(db.Model):
+    """
+    Tracks sharing permissions for medical documents across doctors/clinics.
+    """
+    __tablename__ = 'document_share'
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey('medical_document.id'), nullable=False)
+    shared_with_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # doctor who can view
+    shared_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)    # patient who shared
+    shared_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    can_view = db.Column(db.Boolean, default=True)
+
+    # Relationships
+    document = db.relationship('MedicalDocument', backref=db.backref('shares', lazy='dynamic', cascade="all, delete-orphan"))
+    shared_with = db.relationship('User', foreign_keys=[shared_with_user_id], backref=db.backref('shared_documents', lazy='dynamic'))
+    shared_by = db.relationship('User', foreign_keys=[shared_by_user_id], backref=db.backref('documents_shared', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<DocumentShare Doc:{self.document_id} with User:{self.shared_with_user_id}>'
+
+
+class AuditLog(db.Model):
+    """
+    Tracks user actions for security auditing and compliance (HIPAA/GDPR readiness).
+    """
+    __tablename__ = 'audit_log'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Nullable for login attempts/system actions
+    action = db.Column(db.String(50), nullable=False) # e.g., 'LOGIN', 'VIEW_PATIENT', 'EXPORT_DATA'
+    details = db.Column(db.String(255)) # Specific details about the action
+    ip_address = db.Column(db.String(50))
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f'<AuditLog {self.action} by {self.user_id} at {self.timestamp}>'
+
+
+class SimulationResult(db.Model):
+    """
+    Stores IVF Success Improvement Simulator results for future reference.
+    Tracks what-if scenarios for lifestyle modifications and their predicted impact.
+    """
+    __tablename__ = 'simulation_result'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    # Input features snapshot (JSON) — the base patient data used for simulation
+    input_features = db.Column(db.Text, nullable=False)
+
+    # Current prediction probability (baseline)
+    current_probability = db.Column(db.Float, nullable=False)
+
+    # Full simulation results (JSON array of improvement scenarios)
+    simulation_results = db.Column(db.Text, nullable=False)
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationship to user
+    user = db.relationship('User', backref=db.backref('simulation_results', lazy='dynamic', cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f'<SimulationResult {self.id} for User {self.user_id}: Baseline {self.current_probability:.1f}%>'
+
+
+class PartnerConnection(db.Model):
+    __tablename__ = 'partner_connection'
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    partner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending')
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    accepted_at = db.Column(db.DateTime)
+    disconnected_at = db.Column(db.DateTime)
+
+    permissions = db.relationship('PartnerSharingPermission', backref='connection', uselist=False, cascade='all, delete-orphan')
+    tasks = db.relationship('SharedTask', backref='connection', lazy='dynamic', cascade='all, delete-orphan')
+    notes = db.relationship('SharedNote', backref='connection', lazy='dynamic', cascade='all, delete-orphan')
+    checkins = db.relationship('PartnerCheckIn', backref='connection', lazy='dynamic', cascade='all, delete-orphan')
+    messages = db.relationship('PartnerMessage', backref='connection', lazy='dynamic', cascade='all, delete-orphan')
+
+    @property
+    def patient(self):
+        return User.query.get(self.patient_id)
+
+    @property
+    def partner(self):
+        return User.query.get(self.partner_id)
+
+
+class PartnerInvitation(db.Model):
+    __tablename__ = 'partner_invitation'
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    partner_email = db.Column(db.String(120), nullable=False)
+    partner_name = db.Column(db.String(120), nullable=False)
+    relationship = db.Column(db.String(30), nullable=False)
+    token_hash = db.Column(db.String(255), nullable=False, unique=True)
+    status = db.Column(db.String(20), default='pending')
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    accepted_at = db.Column(db.DateTime)
+    declined_at = db.Column(db.DateTime)
+
+
+class PartnerSharingPermission(db.Model):
+    __tablename__ = 'partner_sharing_permission'
+    id = db.Column(db.Integer, primary_key=True)
+    connection_id = db.Column(db.Integer, db.ForeignKey('partner_connection.id'), nullable=False, unique=True)
+    treatment_shared = db.Column(db.Boolean, default=True)
+    appointments_shared = db.Column(db.Boolean, default=True)
+    medications_shared = db.Column(db.Boolean, default=True)
+    wellness_shared = db.Column(db.Boolean, default=False)
+    mood_shared = db.Column(db.Boolean, default=False)
+    nutrition_shared = db.Column(db.Boolean, default=True)
+    documents_shared = db.Column(db.Boolean, default=False)
+    doctor_notes_shared = db.Column(db.Boolean, default=False)
+    messages_enabled = db.Column(db.Boolean, default=True)
+    tasks_enabled = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class SharedTask(db.Model):
+    __tablename__ = 'shared_task'
+    id = db.Column(db.Integer, primary_key=True)
+    connection_id = db.Column(db.Integer, db.ForeignKey('partner_connection.id'), nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.Text)
+    assigned_to = db.Column(db.String(20), default='partner')
+    due_date = db.Column(db.Date)
+    priority = db.Column(db.String(20), default='medium')
+    status = db.Column(db.String(20), default='pending')
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = db.Column(db.DateTime)
+
+    creator = db.relationship('User', foreign_keys=[created_by], backref='created_shared_tasks')
+
+
+class SharedNote(db.Model):
+    __tablename__ = 'shared_note'
+    id = db.Column(db.Integer, primary_key=True)
+    connection_id = db.Column(db.Integer, db.ForeignKey('partner_connection.id'), nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    creator = db.relationship('User', foreign_keys=[created_by], backref='created_shared_notes')
+
+
+class PartnerCheckIn(db.Model):
+    __tablename__ = 'partner_check_in'
+    id = db.Column(db.Integer, primary_key=True)
+    connection_id = db.Column(db.Integer, db.ForeignKey('partner_connection.id'), nullable=False)
+    checkin_type = db.Column(db.String(50), nullable=False)
+    note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PartnerMessage(db.Model):
+    __tablename__ = 'partner_message'
+    id = db.Column(db.Integer, primary_key=True)
+    connection_id = db.Column(db.Integer, db.ForeignKey('partner_connection.id'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_partner_messages')
+    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_partner_messages')
+
+
+class PartnerNotification(db.Model):
+    __tablename__ = 'partner_notification'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    partner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    type = db.Column(db.String(30), default='shared_update')
+    title = db.Column(db.String(120), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f'<PartnerNotification {self.title} for {self.user_id}>'

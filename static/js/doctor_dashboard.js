@@ -43,78 +43,9 @@ if (successCtx) {
     });
 }
 
-// View patient details
+// View patient details - now redirects to dedicated page
 function viewPatientDetails(patientId) {
-    // In a real application, this would fetch patient data via API
-    document.getElementById('patientDetailsContent').innerHTML = `
-        <div class="text-center">
-            <div class="spinner-border" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Loading patient details...</p>
-        </div>
-    `;
-
-    const modal = new bootstrap.Modal(document.getElementById('patientDetailsModal'));
-    modal.show();
-
-    // Simulate API call
-    setTimeout(() => {
-        document.getElementById('patientDetailsContent').innerHTML = `
-            <div class="row">
-                <div class="col-md-6">
-                    <h6>Medical Information</h6>
-                    <ul class="list-unstyled">
-                        <li><strong>Age:</strong> 32</li>
-                        <li><strong>BMI:</strong> 24.5</li>
-                        <li><strong>AMH Level:</strong> 2.1 ng/mL</li>
-                        <li><strong>FSH Level:</strong> 7.2 mIU/mL</li>
-                    </ul>
-                </div>
-                <div class="col-md-6">
-                    <h6>Treatment History</h6>
-                    <ul class="list-unstyled">
-                        <li><strong>Previous Cycles:</strong> 1</li>
-                        <li><strong>Current Protocol:</strong> Long Protocol</li>
-                        <li><strong>Success Prediction:</strong> 65.2%</li>
-                        <li><strong>Embryo Quality Score:</strong> B+ (Good)</li>
-                    </ul>
-                </div>
-            </div>
-            <hr>
-            <div class="row">
-                <div class="col-12">
-                    <h6>Wellness Trends</h6>
-                    <div class="row">
-                        <div class="col-md-3 text-center">
-                            <div class="wellness-metric">
-                                <div class="metric-value text-primary">4.2/5</div>
-                                <div class="metric-label">Avg Mood</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 text-center">
-                            <div class="wellness-metric">
-                                <div class="metric-value text-warning">2.8/5</div>
-                                <div class="metric-label">Avg Stress</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 text-center">
-                            <div class="wellness-metric">
-                                <div class="metric-value text-success">7.5h</div>
-                                <div class="metric-label">Avg Sleep</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 text-center">
-                            <div class="wellness-metric">
-                                <div class="metric-value text-info">4.1/5</div>
-                                <div class="metric-label">Energy</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }, 1000);
+    window.location.href = `/patient/${patientId}`;
 }
 
 // Add notes

@@ -241,6 +241,11 @@
                             <tbody>
                                 {% for patient in patients %}
                                     {% set latest_cycle = patient.ivf_cycles|sort(attribute='start_date', reverse=True)|first if patient.ivf_cycles else None %}
+                                    {% set latest_prediction = patient.predictions|sort(attribute='prediction_date', reverse=True)|first if patient.predictions else None %}
+                                    {% set last_log = patient.wellness_logs|sort(attribute='date', reverse=True)|first if patient.wellness_logs else None %}
+                                    {% set ivf_cycles_list = patient.ivf_cycles|list %}
+                                    {% set total_cycles = ivf_cycles_list|length %}
+                                    {% set successful_cycles = ivf_cycles_list|selectattr('outcome', 'equalto', 'BFP')|list|length %}
                                     <tr>
                                         <td>
                                             <div class="d-flex align-items-center">
@@ -250,12 +255,25 @@
                                                 <div>
                                                     <strong>{{ patient.first_name }} {{ patient.last_name }}</strong>
                                                     <br><small class="text-muted">{{ patient.email }}</small>
+                                                    {% if patient.patient_data %}
+                                                        <br><small class="text-info">
+                                                            {% if patient.patient_data.bmi %}BMI: {{ patient.patient_data.bmi }}{% endif %}
+                                                            {% if patient.patient_data.amh %} | AMH: {{ patient.patient_data.amh }} ng/mL{% endif %}
+                                                        </small>
+                                                    {% endif %}
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
                                             {% if patient.patient_data and patient.patient_data.age %}
-                                                {{ patient.patient_data.age or 'N/A' }}
+                                                {{ patient.patient_data.age }}
+                                                {% if patient.patient_data.age < 35 %}
+                                                    <br><small class="text-success">Excellent prognosis</small>
+                                                {% elif patient.patient_data.age < 38 %}
+                                                    <br><small class="text-warning">Good prognosis</small>
+                                                {% else %}
+                                                    <br><small class="text-danger">Advanced age</small>
+                                                {% endif %}
                                             {% else %}
                                                 N/A
                                             {% endif %}
@@ -264,19 +282,31 @@
                                             {% if latest_cycle %}
                                                 <span class="badge bg-info">Cycle {{ latest_cycle.id }}</span>
                                                 <br><small class="text-muted">{{ latest_cycle.protocol or 'Standard' }}</small>
+                                                <br><small class="text-info">Started: {{ latest_cycle.start_date.strftime('%m/%d/%Y') if latest_cycle.start_date else 'N/A' }}</small>
+                                                {% if total_cycles > 1 %}
+                                                    <br><small class="text-muted">Total cycles: {{ total_cycles }}</small>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="badge bg-secondary">No Active Cycle</span>
+                                                {% if total_cycles > 0 %}
+                                                    <br><small class="text-muted">Previous: {{ total_cycles }} cycles</small>
+                                                {% endif %}
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% set latest_prediction = patient.predictions|sort(attribute='prediction_date', reverse=True)|first if patient.predictions else None %}
                                             {% if latest_prediction and latest_prediction.success_probability is not none %}
                                                 <div class="progress" style="height: 8px;">
                                                     <div class="progress-bar" style="inline-size: {{ latest_prediction.success_probability * 100 }}%"></div>
                                                 </div>
                                                 <small>{{ (latest_prediction.success_probability * 100)|round(1) }}%</small>
+                                                {% if successful_cycles > 0 %}
+                                                    <br><small class="text-success">{{ successful_cycles }}/{{ total_cycles }} success</small>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="text-muted">Pending</span>
+                                                {% if successful_cycles > 0 %}
+                                                    <br><small class="text-success">{{ successful_cycles }}/{{ total_cycles }} historical</small>
+                                                {% endif %}
                                             {% endif %}
                                         </td>
                                         <td>
@@ -285,24 +315,47 @@
                                                     <span class="badge bg-success">Successful</span>
                                                 {% elif latest_cycle.outcome == 'BFN' %}
                                                     <span class="badge bg-danger">Unsuccessful</span>
+                                                {% elif latest_cycle.outcome == 'Ongoing' %}
+                                                    <span class="badge bg-primary">Ongoing</span>
                                                 {% else %}
-                                                    <span class="badge bg-primary">{{ latest_cycle.status.title() }}</span>
+                                                    <span class="badge bg-warning">{{ latest_cycle.status.title() }}</span>
+                                                {% endif %}
+                                                {% if latest_cycle.outcome %}
+                                                    <br><small class="text-muted">{{ latest_cycle.end_date.strftime('%m/%d/%Y') if latest_cycle.end_date else 'Recent' }}</small>
                                                 {% endif %}
                                             {% else %}
                                                 <span class="badge bg-secondary">Not Started</span>
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% set last_log = patient.wellness_logs|sort(attribute='date', reverse=True)|first if patient.wellness_logs else None %}
                                             {% if last_log and last_log.date %}
                                                 {{ last_log.date.strftime('%m/%d/%Y') }}
+                                                {% if last_log.mood_rating %}
+                                                    <br><small class="text-info">Mood: {{ last_log.mood_rating }}/5</small>
+                                                {% endif %}
+                                                {% if last_log.stress_level %}
+                                                    <br><small class="text-warning">Stress: {{ last_log.stress_level }}/5</small>
+                                                {% endif %}
                                             {% else %}
                                                 No logs
                                             {% endif %}
                                         </td>
                                         <td>
                                             <div class="ai-analysis-summary">
-                                                {% if latest_cycle %}
+                                                {% if latest_prediction %}
+                                                    <div class="mb-1">
+                                                        {% if latest_prediction.success_probability > 0.4 %}
+                                                            <span class="badge bg-success">AI Risk: Low</span>
+                                                        {% elif latest_prediction.success_probability > 0.2 %}
+                                                            <span class="badge bg-warning">AI Risk: Medium</span>
+                                                        {% else %}
+                                                            <span class="badge bg-danger">AI Risk: High</span>
+                                                        {% endif %}
+                                                    </div>
+                                                    <div class="small text-muted">
+                                                        <i class="fas fa-brain"></i> Updated {{ latest_prediction.prediction_date.strftime('%m/%d/%Y') if latest_prediction.prediction_date else 'recently' }}
+                                                    </div>
+                                                {% elif latest_cycle %}
                                                     <div class="mb-1">
                                                         <span class="badge bg-info">AI Risk: Low</span>
                                                     </div>
@@ -316,9 +369,12 @@
                                         </td>
                                         <td>
                                             <div class="btn-group btn-group-sm">
-                                                <button class="btn btn-outline-primary" onclick="viewPatientDetails({{ patient.id }})">
+                                                <a href="{{ url_for('patient_details', patient_id=patient.id) }}" class="btn btn-outline-primary">
                                                     <i class="fas fa-eye"></i> View
-                                                </button>
+                                                </a>
+                                                <a href="{{ url_for('edit_patient', patient_id=patient.id) }}" class="btn btn-outline-secondary">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </a>
                                                 <button class="btn btn-outline-success" onclick="openNotesModal({{ latest_cycle.id if latest_cycle else 'null' }})">
                                                     <i class="fas fa-notes-medical"></i> Note
                                                 </button>

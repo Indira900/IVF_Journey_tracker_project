@@ -420,6 +420,27 @@ const ChatBot = {
     }
 };
 
+// Function to open chatbot in a small popup window
+function openChatbotPopup() {
+    const popupWidth = 400;
+    const popupHeight = 600;
+    const left = (window.innerWidth - popupWidth) / 2;
+    const top = (window.innerHeight - popupHeight) / 2;
+
+    const popup = window.open(
+        '/chatbot',
+        'chatbotPopup',
+        `width=${popupWidth},height=${popupHeight},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+
+    if (popup) {
+        popup.focus();
+    } else {
+        // Fallback if popup is blocked
+        window.location.href = '/chatbot';
+    }
+}
+
 // Quick access functions for global use
 function toggleChat() {
     ChatBot.toggle();
@@ -438,7 +459,7 @@ function clearChatHistory() {
 // Initialize chatbot when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     ChatBot.init();
-    
+
     // Only run this if the chat widget exists on the page
     if (document.getElementById('chatWidget')) {
         // Show common questions after a delay if no messages

@@ -701,9 +701,13 @@ function createWellnessChart(canvasId, data) {
  */
 window.addEventListener('error', function(e) {
     console.error('JavaScript error:', e.error);
-    
-    // Show user-friendly error message for critical errors
-    if (e.error && e.error.message) {
+
+    // Only show toast for critical errors, not all JS errors
+    if (e.error && e.error.message && (
+        e.error.message.includes('TypeError') ||
+        e.error.message.includes('ReferenceError') ||
+        e.error.message.includes('SyntaxError')
+    )) {
         showToast('An error occurred. Please refresh the page.', 'error', 5000);
     }
 });

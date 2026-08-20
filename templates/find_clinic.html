@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 
-{% block head %}
-    <!-- Leaflet CSS for Maps -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhseINkfSgoIHPqNkRHE2pRESqmAudayI1AI=" crossorigin=""/>
-{% endblock %}
-
 {% block title %}Find a Clinic - IVF Journey Tracker{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Google Maps API -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao&libraries=places"></script>
+{% endblock %}
 
 {% block content %}
 <div class="container py-5">
@@ -13,130 +15,143 @@
     <i class="fas fa-hospital"></i> Find IVF Clinics
   </h2>
 
-  <form method="POST" action="{{ url_for('find_clinic') }}" class="mb-4">
-    <div class="input-group">
-      <input type="text" class="form-control" name="location"
-             placeholder="Enter city or state (e.g., Mumbai, Karnataka)">
-      <button class="btn btn-success" type="submit">Search</button>
-    </div>
-    <small class="text-muted">You can search by city, state, or clinic name.</small>
-  </form>
-
-  <!-- Map Toggle -->
-  <div class="d-flex justify-content-center mb-4">
-    <div class="btn-group" role="group" aria-label="View toggle">
-      <input type="radio" class="btn-check" name="viewToggle" id="listView" autocomplete="off" checked>
-      <label class="btn btn-outline-success" for="listView">
-        <i class="fas fa-list"></i> List View
-      </label>
-      <input type="radio" class="btn-check" name="viewToggle" id="mapView" autocomplete="off">
-      <label class="btn btn-outline-success" for="mapView">
-        <i class="fas fa-map-marked-alt"></i> Map View
-      </label>
-    </div>
-  </div>
-
-  <!-- Map Container -->
-  <div id="mapContainer" class="d-none mb-4">
-    <div id="clinicMap" style="height: 500px; width: 100%; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);"></div>
-  </div>
-
-  {% if not query %}
-    <div class="alert alert-info">
-      <h6><i class="fas fa-info-circle me-2"></i>Available Clinics</h6>
-      <p>We have <strong>{{ total_clinics|default(0) }}</strong> IVF clinics available across India. Search above to find clinics in your area, or browse all clinics below.</p>
-    </div>
-
-    <h5 class="mt-4 mb-3">Browse All Clinics</h5>
-    <div class="row mt-3">
-      {% for clinic in all_clinics %}
-        <div class="col-md-6 mb-4">
-          <div class="card shadow-sm h-100">
-            <div class="card-body d-flex flex-column">
-              <h6 class="card-title fw-bold text-success">
-                <i class="fas fa-hospital me-2"></i>{{ clinic.name }}
-              </h6>
-                <p class="card-text mb-2">
-                  <i class="fas fa-map-marker-alt text-danger me-2"></i>
-                  {{ clinic.address }}
-                </p>
-              {% if clinic.phone %}
-                <p class="card-text mb-2">
-                  <i class="fas fa-phone text-success me-2"></i>{{ clinic.phone or '' }}
-                </p>
-              {% endif %}
-              {% if clinic.contact_number %}
-                <p class="card-text mb-2">
-                  <i class="fas fa-mobile-alt text-success me-2"></i>{{ clinic.contact_number or '' }}
-                </p>
-              {% endif %}
-              {% if clinic.description %}
-                <p class="card-text text-muted small mb-3">{{ (clinic.description or '')[:100] }}...</p>
-              {% endif %}
-              <div class="mt-auto">
-                <a href="{{ url_for('clinic_detail', clinic_id=clinic.id) }}" class="btn btn-success btn-sm">
-                  <i class="fas fa-info-circle me-2"></i>View Details
-                </a>
-                {% if clinic.website %}
-                  <a href="{{ clinic.website }}" target="_blank" class="btn btn-outline-primary btn-sm ms-2">
-                    <i class="fas fa-external-link-alt me-2"></i>Website
-                  </a>
-                {% endif %}
-                {% if clinic.latitude and clinic.longitude %}
-                  <a href="#" class="btn btn-outline-info btn-sm ms-2" onclick="viewOnMap({{ clinic.latitude }}, {{ clinic.longitude }}, '{{ clinic.name|replace('\'', '\\\'') }}')">
-                    <i class="fas fa-map-marked-alt me-2"></i>View on Map
-                  </a>
-                {% endif %}
-              </div>
+  <!-- Search and Filters -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <form method="GET" action="{{ url_for('find_clinic') }}" id="search-form">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <input type="text" class="form-control" name="query" id="query-input"
+                   placeholder="Search clinics, cities, states, or zip codes"
+                   value="{{ query }}">
+            <div id="location-display" class="mt-2 text-muted small" style="display: none;">
+              <i class="fas fa-map-marker-alt me-1"></i>
+              <span id="selected-location"></span>
             </div>
           </div>
+          <div class="col-md-2">
+            <select class="form-select" name="state" id="state-select">
+              <option value="">All States</option>
+              {% for state in states %}
+                <option value="{{ state }}" {% if state_filter == state %}selected{% endif %}>{{ state }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" name="clinic_type" id="clinic-type-select">
+              <option value="">All Types</option>
+              {% for clinic_type in clinic_types %}
+                <option value="{{ clinic_type }}" {% if clinic_type_filter == clinic_type %}selected{% endif %}>{{ clinic_type }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-success w-100" type="submit">
+              <i class="fas fa-search me-2"></i>Search
+            </button>
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-outline-secondary w-100" type="button" onclick="clearFilters()">
+              <i class="fas fa-times me-2"></i>Clear
+            </button>
+          </div>
         </div>
-      {% endfor %}
+      </form>
     </div>
-  {% endif %}
+  </div>
 
-  {% if query %}
-    <h5 class="mt-4">Search Results for "<strong>{{ query }}</strong>"</h5>
+  <!-- Results Summary -->
+  <div class="alert alert-info">
+    <h6><i class="fas fa-info-circle me-2"></i>Search Results</h6>
+    <p>Found <strong>{{ total_clinics }}</strong> clinics{% if query %} matching "{{ query }}"{% endif %}{% if state_filter %} in {{ state_filter }}{% endif %}{% if clinic_type_filter %} of type {{ clinic_type_filter }}{% endif %}.</p>
+  </div>
 
+  <!-- View Toggle -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <button class="btn btn-outline-primary btn-sm me-2" onclick="setView('list')" id="list-view-btn">
+        <i class="fas fa-list me-1"></i>List View
+      </button>
+      <button class="btn btn-outline-primary btn-sm" onclick="setView('map')" id="map-view-btn">
+        <i class="fas fa-map me-1"></i>Map View
+      </button>
+    </div>
+    {% if clinics_pagination %}
+      <nav aria-label="Clinic pagination">
+        <ul class="pagination pagination-sm mb-0">
+          {% if clinics_pagination.has_prev %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('find_clinic', query=query, state=state_filter, clinic_type=clinic_type_filter, page=clinics_pagination.prev_num) }}">
+                Previous
+              </a>
+            </li>
+          {% endif %}
+          {% for page_num in clinics_pagination.iter_pages() %}
+            {% if page_num %}
+              <li class="page-item {% if page_num == clinics_pagination.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('find_clinic', query=query, state=state_filter, clinic_type=clinic_type_filter, page=page_num) }}">
+                  {{ page_num }}
+                </a>
+              </li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+          {% endfor %}
+          {% if clinics_pagination.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('find_clinic', query=query, state=state_filter, clinic_type=clinic_type_filter, page=clinics_pagination.next_num) }}">
+                Next
+              </a>
+            </li>
+          {% endif %}
+        </ul>
+      </nav>
+    {% endif %}
+  </div>
+
+  <!-- List View -->
+  <div id="list-view" class="view-container">
     {% if clinics %}
-      <div class="row mt-3">
+      <div class="row">
         {% for clinic in clinics %}
-          <div class="col-md-6 mb-4">
+          <div class="col-lg-6 mb-4">
             <div class="card shadow-sm h-100">
               <div class="card-body d-flex flex-column">
                 <h6 class="card-title fw-bold text-success">
                   <i class="fas fa-hospital me-2"></i>{{ clinic.name }}
+                  {% if clinic.clinic_type %}
+                    <span class="badge bg-primary ms-2">{{ clinic.clinic_type }}</span>
+                  {% endif %}
                 </h6>
                 <p class="card-text mb-2">
                   <i class="fas fa-map-marker-alt text-danger me-2"></i>
-                  {{ clinic.address }}
+                  {{ clinic.city }}, {{ clinic.state }}{% if clinic.zip_code %} {{ clinic.zip_code }}{% endif %}
                 </p>
+                {% if clinic.address %}
+                  <p class="card-text small text-muted mb-2">{{ clinic.address }}</p>
+                {% endif %}
                 {% if clinic.phone %}
                   <p class="card-text mb-2">
-                    <i class="fas fa-phone text-success me-2"></i>{{ clinic.phone or '' }}
+                    <i class="fas fa-phone text-success me-2"></i>{{ clinic.phone }}
                   </p>
                 {% endif %}
-                {% if clinic.contact_number %}
+                {% if clinic.website %}
                   <p class="card-text mb-2">
-                    <i class="fas fa-mobile-alt text-success me-2"></i>{{ clinic.contact_number or '' }}
+                    <i class="fas fa-globe text-primary me-2"></i>
+                    <a href="{{ clinic.website }}" target="_blank" class="text-decoration-none">{{ clinic.website }}</a>
                   </p>
                 {% endif %}
                 {% if clinic.description %}
-                  <p class="card-text text-muted small mb-3">{{ (clinic.description or '')[:100] }}...</p>
+                  <p class="card-text text-muted small mb-3">{{ clinic.description[:150] }}{% if clinic.description|length > 150 %}...{% endif %}</p>
                 {% endif %}
                 <div class="mt-auto">
                   <a href="{{ url_for('clinic_detail', clinic_id=clinic.id) }}" class="btn btn-success btn-sm">
                     <i class="fas fa-info-circle me-2"></i>View Details
                   </a>
-                  {% if clinic.website %}
-                    <a href="{{ clinic.website }}" target="_blank" class="btn btn-outline-primary btn-sm ms-2">
-                      <i class="fas fa-external-link-alt me-2"></i>Website
-                    </a>
-                  {% endif %}
                   {% if clinic.latitude and clinic.longitude %}
-                    <a href="#" class="btn btn-outline-info btn-sm ms-2" onclick="viewOnMap({{ clinic.latitude }}, {{ clinic.longitude }}, '{{ clinic.name|replace('\'', '\\\'') }}')">
-                      <i class="fas fa-map-marked-alt me-2"></i>View on Map
-                    </a>
+                    <button class="btn btn-outline-primary btn-sm ms-2" onclick="showOnMap({{ clinic.latitude }}, {{ clinic.longitude }}, '{{ clinic.name|replace("'", "\\'") }}')">
+                      <i class="fas fa-map-marker-alt me-1"></i>Map
+                    </button>
                   {% endif %}
                 </div>
               </div>
@@ -145,111 +160,66 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="text-danger mt-3">
-        No clinics found matching your search criteria. Please try another location.
-      </p>
+      <div class="text-center py-5">
+        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">No clinics found</h5>
+        <p class="text-muted">Try adjusting your search criteria or clearing filters.</p>
+      </div>
     {% endif %}
-  {% endif %}
+  </div>
+
+  <!-- Map View -->
+  <div id="map-view" class="view-container d-none">
+    <div id="google-map" style="height: 600px; width: 100%; border-radius: 8px;"></div>
+  </div>
+
 </div>
-{% endblock %}
 
-{% block scripts %}
+<script src="{{ url_for('static', filename='js/find_clinic.js') }}"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize map
-    var map = L.map('clinicMap').setView([20.5937, 78.9629], 5); // Center on India
+  // Initialize autocomplete and map
+  document.addEventListener('DOMContentLoaded', function() {
+    initAutocomplete();
+    initMap();
+  });
 
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+  // Pass clinic data to JavaScript
+  window.clinicsData = {{ clinics_data|tojson }};
 
-    // Clinic data from template
-    var clinics = [
-        {% if query and clinics %}
-            {% for clinic in clinics %}
-                {
-                    "id": {{ clinic.id }},
-                    "name": "{{ clinic.name|replace('"', '\\"')|replace('\n', '\\n') }}",
-                    "address": "{{ clinic.address|replace('"', '\\"')|replace('\n', '\\n') }}",
-                    "city": "{{ clinic.city }}",
-                    "state": "{{ clinic.state }}",
-                    "phone": "{{ clinic.phone or '' }}",
-                    "website": "{{ clinic.website or '' }}",
-                    "lat": {{ clinic.latitude|default(0) }},
-                    "lng": {{ clinic.longitude|default(0) }},
-                    "url": "{{ url_for('clinic_detail', clinic_id=clinic.id) }}"
-                }{% if not loop.last %},{% endif %}
-            {% endfor %}
-        {% elif all_clinics %}
-            {% for clinic in all_clinics %}
-                {
-                    "id": {{ clinic.id }},
-                    "name": "{{ clinic.name|replace('"', '\\"')|replace('\n', '\\n') }}",
-                    "address": "{{ clinic.address|replace('"', '\\"')|replace('\n', '\\n') }}",
-                    "city": "{{ clinic.city }}",
-                    "state": "{{ clinic.state }}",
-                    "phone": "{{ clinic.phone or '' }}",
-                    "website": "{{ clinic.website or '' }}",
-                    "lat": {{ clinic.latitude|default(0) }},
-                    "lng": {{ clinic.longitude|default(0) }},
-                    "url": "{{ url_for('clinic_detail', clinic_id=clinic.id) }}"
-                }{% if not loop.last %},{% endif %}
-            {% endfor %}
-        {% endif %}
-    ];
+  function clearFilters() {
+    document.getElementById('query-input').value = '';
+    document.getElementById('state-select').value = '';
+    document.getElementById('clinic-type-select').value = '';
+    document.getElementById('search-form').submit();
+  }
 
-    // Add markers for clinics
-    clinics.forEach(function(clinic) {
-        if (clinic.lat && clinic.lng) {
-            var marker = L.marker([clinic.lat, clinic.lng]).addTo(map);
+  function setView(view) {
+    const listView = document.getElementById('list-view');
+    const mapView = document.getElementById('map-view');
+    const listBtn = document.getElementById('list-view-btn');
+    const mapBtn = document.getElementById('map-view-btn');
 
-            var popupContent = `
-                <div class="clinic-popup">
-                    <h6 class="text-success mb-2">${clinic.name}</h6>
-                    <p class="mb-1"><i class="fas fa-map-marker-alt text-danger me-1"></i>${clinic.address}</p>
-                    ${clinic.phone ? `<p class="mb-1"><i class="fas fa-phone text-success me-1"></i>${clinic.phone}</p>` : ''}
-                    <div class="mt-2">
-                        <a href="${clinic.url}" class="btn btn-success btn-sm">
-                            <i class="fas fa-info-circle me-1"></i>View Details
-                        </a>
-                        ${clinic.website ? `<a href="${clinic.website}" target="_blank" class="btn btn-outline-primary btn-sm ms-1">
-                            <i class="fas fa-external-link-alt me-1"></i>Website
-                        </a>` : ''}
-                    </div>
-                </div>
-            `;
-
-            marker.bindPopup(popupContent);
-        }
-    });
-
-    // View toggle functionality
-    const listViewBtn = document.getElementById('listView');
-    const mapViewBtn = document.getElementById('mapView');
-    const mapContainer = document.getElementById('mapContainer');
-    const listContainer = document.querySelector('.row.mt-3') || document.querySelector('.row');
-
-    function toggleView() {
-        if (mapViewBtn.checked) {
-            mapContainer.classList.remove('d-none');
-            if (listContainer) listContainer.style.display = 'none';
-            // Refresh map size
-            setTimeout(() => map.invalidateSize(), 100);
-        } else {
-            mapContainer.classList.add('d-none');
-            if (listContainer) listContainer.style.display = 'flex';
-        }
+    if (view === 'list') {
+      listView.classList.remove('d-none');
+      mapView.classList.add('d-none');
+      listBtn.classList.add('active');
+      mapBtn.classList.remove('active');
+    } else {
+      listView.classList.add('d-none');
+      mapView.classList.remove('d-none');
+      listBtn.classList.remove('active');
+      mapBtn.classList.add('active');
     }
+  }
 
-    // Function to view clinic on map
-    function viewOnMap(lat, lng, name) {
-        // Open Google Maps in a new tab with the clinic location
-        window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+  function showOnMap(lat, lng, name) {
+    setView('map');
+    // Center map on clinic location
+    if (window.clinicMap) {
+      window.clinicMap.setView([lat, lng], 15);
     }
-
-    listViewBtn.addEventListener('change', toggleView);
-    mapViewBtn.addEventListener('change', toggleView);
-});
+  }
 </script>
 {% endblock %}
+
+

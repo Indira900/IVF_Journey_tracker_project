@@ -7,15 +7,14 @@ np.random.seed(42) # for reproducibility
 n = 100
 
 ivf_data = pd.DataFrame({
-    "Age": np.random.randint(25, 45, n),
-    "BMI": np.random.uniform(18, 35, n).round(2),
-    "AMH": np.random.uniform(0.5, 6.0, n).round(2),
-    "FSH": np.random.uniform(3.0, 12.0, n).round(2),
-    "LH": np.random.uniform(2.0, 10.0, n).round(2),
-    "Previous_IVF_Attempts": np.random.randint(0, 4, n),
-    "Stress_Level": np.random.randint(1, 6, n),
-    "Sleep_Hours": np.random.uniform(4, 9, n).round(1),
-    "Exercise_Min_per_Day": np.random.randint(0, 60, n),
+    "age": np.random.randint(25, 45, n),
+    "bmi": np.random.uniform(18, 35, n).round(2),
+    "amh": np.random.uniform(0.5, 6.0, n).round(2),
+    "fsh": np.random.uniform(3.0, 12.0, n).round(2),
+    "previous_ivf": np.random.randint(0, 4, n),
+    "stress": np.random.randint(1, 6, n),
+    "sleep_hours": np.random.uniform(4, 9, n).round(1),
+    "exercise_min": np.random.randint(0, 60, n),
     "IVF_Success": np.random.choice([0, 1], n, p=[0.4, 0.6])  # 0=Fail, 1=Success
 }) # 100 rows of IVF success data
 
